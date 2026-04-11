@@ -10,11 +10,20 @@ const GHL_API_KEY = 'pit-d6507e9f-e7d6-4d76-bfbe-f6985ccdbdaf';
 
 app.use(express.json());
 
-function extractCallbackTime(message) {
-  if (!message || typeof message !== 'string') return null;
+function getMessageText(message) {
+  if (!message) return '';
+  if (typeof message === 'string') return message.trim();
+  if (typeof message === 'object' && typeof message.body === 'string') {
+    return message.body.trim();
+  }
+  return String(message).trim();
+}
 
-  const match = message.match(/(\d{1,2}(?::\d{2})?\s*(am|pm))/i);
-  if (!match) return null;
+function extractCallbackTime(messageText) {
+  if (!messageText || typeof messageText !== 'string') return '';
+
+  const match = messageText.match(/(\d{1,2}(?::\d{2})?\s*(am|pm))/i);
+  if (!match) return '';
 
   return match[0];
 }
@@ -27,11 +36,17 @@ app.post('/api/extract-callback-time', async (req, res) => {
   try {
     const { message, contact_id } = req.body || {};
 
-    if (!message || !contact_id) {
-      return res.status(400).json({ error: 'Missing message or contact_id' });
+    if (!contact_id) {
+      return res.status(400).json({ error: 'Missing contact_id' });
     }
 
-    const extractedTime = extractCallbackTime(message);
+    const messageText = getMessageText(message);
+
+    if (!messageText) {
+      return res.status(400).json({ error: 'Missing message text' });
+    }
+
+    const extractedTime = extractCallbackTime(messageText);
 
     await axios.put(
       `https://services.leadconnectorhq.com/contacts/${contact_id}`,
@@ -39,35 +54,44 @@ app.post('/api/extract-callback-time', async (req, res) => {
         customFields: [
           {
             id: 'rq_extracted_time',
-            field_value: extractedTime || '',
+            value: extractedTime
           },
           {
             id: 'rq_raw_message',
-            field_value: message,
+            value: messageText
           },
           {
             id: 'rq_raw_phrase',
-            field_value: message,
-          },
-        ],
+            value: messageText
+          }
+        ]
       },
       {
         headers: {
           Authorization: `Bearer ${GHL_API_KEY}`,
           Version: '2021-07-28',
-          'Content-Type': 'application/json',
-        },
+          'Content-Type': 'application/json'
+        }
       }
     );
 
-    res.json({ success: true, extractedTime });
-
+    res.json({
+      success: true,
+      message_text: messageText,
+      extracted_time: extractedTime
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    console.error(
+      'Webhook error:',
+      err.response ? err.response.data : err.message
+    );
+    res.status(500).json({
+      error: 'Server error',
+      details: err.response ? err.response.data : err.message
+    });
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
