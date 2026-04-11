@@ -4,15 +4,14 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-// 🔐 ENV VARIABLES (set in Render)
+// ENV VARIABLES (set in Render)
 const GHL_API_KEY = process.env.GHL_API_KEY;
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
 
-// 🧠 Extract time safely (FIXED)
+// Extract time safely
 function extractTime(input) {
   let text = input;
 
-  // 🔥 FIX: handle object input from GHL
   if (typeof input === "object" && input.body) {
     text = input.body;
   }
@@ -24,8 +23,8 @@ function extractTime(input) {
 
   if (!match) return null;
 
-  let hour = parseInt(match[3]);
-  const minute = match[4] ? parseInt(match[4].replace(':', '')) : 0;
+  let hour = parseInt(match[3], 10);
+  const minute = match[4] ? parseInt(match[4].replace(':', ''), 10) : 0;
   const period = match[5].toLowerCase();
 
   if (period === "pm" && hour !== 12) hour += 12;
@@ -33,7 +32,6 @@ function extractTime(input) {
 
   const now = new Date();
 
-  // If "tomorrow"
   if (match[1]) {
     now.setDate(now.getDate() + 1);
   }
@@ -43,7 +41,16 @@ function extractTime(input) {
   return now.toISOString();
 }
 
-// 🧩 MAIN WEBHOOK
+function getRawMessage(input) {
+  if (typeof input === "object" && input.body) {
+    return input.body;
+  }
+  if (typeof input === "string") {
+    return input;
+  }
+  return "";
+}
+
 app.post('/api/extract-callback-time', async (req, res) => {
   try {
     const { message, contact_id } = req.body;
@@ -51,12 +58,7 @@ app.post('/api/extract-callback-time', async (req, res) => {
     console.log("Incoming message:", message);
 
     const extractedTime = extractTime(message);
-
-    // 🔥 Always ensure raw message is STRING
-    let rawMessage = message;
-    if (typeof message === "object" && message.body) {
-      rawMessage = message.body;
-    }
+    const rawMessage = getRawMessage(message);
 
     await axios.put(
       `https://services.leadconnectorhq.com/contacts/${contact_id}`,
@@ -72,6 +74,10 @@ app.post('/api/extract-callback-time', async (req, res) => {
           },
           {
             id: "rq_extracted_time",
+            field_value: extractedTime || ""
+          },
+          {
+            id: "rq_scheduled_call_time",
             field_value: extractedTime || ""
           }
         ]
@@ -96,12 +102,10 @@ app.post('/api/extract-callback-time', async (req, res) => {
   }
 });
 
-// ❤️ HEALTH CHECK (for waking server)
 app.get('/api/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// 🚀 START SERVER
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
