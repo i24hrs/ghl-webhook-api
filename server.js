@@ -38,15 +38,15 @@ app.post('/api/extract-callback-time', async (req, res) => {
       {
         customFields: [
           {
-            key: 'rq_extracted_time',
+            id: 'rq_extracted_time',
             field_value: extractedTime || '',
           },
           {
-            key: 'rq_raw_message',
+            id: 'rq_raw_message',
             field_value: message,
           },
           {
-            key: 'rq_raw_phrase',
+            id: 'rq_raw_phrase',
             field_value: message,
           },
         ],
